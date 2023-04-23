@@ -204,7 +204,8 @@ class PadatiousSklearn(SklearnOVOSClassifier):
         return super().score(X, y)
 
     @classmethod
-    def _augment(cls, train_data, target_data):
+    def _augment(cls, train_data, target_data, entities=None):
+        entities = entities or {}
 
         for idx, intent in enumerate(target_data):
             toks = train_data[idx]
@@ -220,9 +221,7 @@ class PadatiousSklearn(SklearnOVOSClassifier):
         outputs = []
 
         def add(toks, out):
-            for i, t in enumerate(toks):
-                if t.startswith("{"):
-                    toks[i] = ":0"
+
             inputs.append(toks)
             outputs.append(out)
 
@@ -259,6 +258,18 @@ class PadatiousSklearn(SklearnOVOSClassifier):
         add([':null:'], 0.0)
         add([], 0.0)
 
+        for entity, samples in entities.items():
+            for s in samples:
+                for idx, toks in enumerate(train_data):
+                    with_entity = toks[:]
+                    for i, token in enumerate(with_entity):
+                        if token.startswith('{'):
+                            ent = token.lstrip("{").rstrip("}")
+                            if ent == entity:
+                                with_entity[i] = s
+                    if with_entity != toks:
+                        add(with_entity, 1.0)
+
         for idx, toks in enumerate(train_data):
             if target_data[idx] == 0:
                 continue
@@ -272,7 +283,7 @@ class PadatiousSklearn(SklearnOVOSClassifier):
         return inputs, outputs
 
     @classmethod
-    def intent2dataset(cls, X, y, target_intent):
+    def intent2dataset(cls, X, y, target_intent, entities=None):
         inputs = []
         outputs = []
 
@@ -284,6 +295,6 @@ class PadatiousSklearn(SklearnOVOSClassifier):
             else:
                 outputs.append(1)
 
-        return cls._augment(inputs, outputs)
+        return cls._augment(inputs, outputs, entities)
 
 
