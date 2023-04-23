@@ -3,10 +3,12 @@ import os
 
 import joblib
 import numpy as np
-from ovos_classifiers.skovos.classifier import SklearnOVOSClassifier
+from ovos_classifiers.skovos.classifier import SklearnOVOSClassifier, SklearnOVOSVotingClassifier
 from ovos_utils.xdg_utils import xdg_data_home
 from sklearn import preprocessing
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.linear_model import LogisticRegression, Perceptron
+from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 
 
@@ -83,7 +85,7 @@ class PIds(StrEnum):
     end = ':end'
 
 
-class PadatiousEntityVectorizer(BaseEstimator, TransformerMixin):
+class EnpadadousEntityVectorizer(BaseEstimator, TransformerMixin):
     def __init__(self, direction, token):
         super().__init__()
         self.ids = IdManager(PIds)
@@ -118,7 +120,7 @@ class PadatiousEntityVectorizer(BaseEstimator, TransformerMixin):
         return feats
 
 
-class PadatiousVectorizer(BaseEstimator, TransformerMixin):
+class EnpadadousVectorizer(BaseEstimator, TransformerMixin):
     def __init__(self):
         super().__init__()
         self.ids = IdManager(Ids)
@@ -154,8 +156,8 @@ class PadatiousVectorizer(BaseEstimator, TransformerMixin):
             self.ids.add_sent(tokens)
             for tok in tokens:
                 if tok not in self.pos_intents:
-                    self.pos_intents[tok] = [PadatiousEntityVectorizer(+1, tok),
-                                             PadatiousEntityVectorizer(-1, tok)]
+                    self.pos_intents[tok] = [EnpadadousEntityVectorizer(+1, tok),
+                                             EnpadadousEntityVectorizer(-1, tok)]
                 self.pos_intents[tok][0].fit(tokens)
                 self.pos_intents[tok][1].fit(tokens)
         return self
@@ -164,12 +166,12 @@ class PadatiousVectorizer(BaseEstimator, TransformerMixin):
         return [self.vectorize(x) for x in X]
 
 
-class PadatiousSklearn(SklearnOVOSClassifier):
+class EnpadadousSklearn(SklearnOVOSClassifier):
     LENIENCE = 0.6
-    ALGO = SVC
 
-    def __init__(self):
-        super().__init__("padatious", self.ALGO(probability=True))
+    def __init__(self, clf=None):
+        clf = clf or SVC(probability=True)
+        super().__init__("enpadadous", clf)
         # convert y values to categorical values
         self.encoder = preprocessing.LabelEncoder()
 
@@ -190,7 +192,7 @@ class PadatiousSklearn(SklearnOVOSClassifier):
     @property
     def pipeline(self):
         return [
-            ('feats', PadatiousVectorizer()),
+            ('feats', EnpadadousVectorizer()),
             ('clf', self._pipeline_clf)
         ]
 
@@ -298,3 +300,21 @@ class PadatiousSklearn(SklearnOVOSClassifier):
         return cls._augment(inputs, outputs, entities)
 
 
+class EnpadadousVotingSklearn(EnpadadousSklearn, SklearnOVOSVotingClassifier):
+    def __init__(self, voter_clfs=None, voting='soft', weights=None):
+        voter_clfs = voter_clfs or [SVC(probability=True), LogisticRegression(), Perceptron()]
+        SklearnOVOSVotingClassifier.__init__(self,
+                                             voter_clfs, pipeline_id="enpadadous_voting",
+                                             voting=voting, weights=weights)
+        # convert y values to categorical values
+        self.encoder = preprocessing.LabelEncoder()
+
+    @property
+    def voting_pipelines(self):
+        pipes = {}
+        for name, clf in self.voter_clfs:
+            pipes[name] = Pipeline([
+                ('feats', EnpadadousVectorizer()),
+                ('clf', clf)
+            ])
+        return pipes
